@@ -24,7 +24,7 @@ public:
     }
     ~ThreadSafeDataProxy() {
         std::cout << "\tUnLocked" << " TID:" << std::this_thread::get_id() << "\t Lock Object : " << m_pMutexLock <<"\n";
-        //m_pMutexLock->unlock();
+        m_pMutexLock->unlock();
     }
 
 private:
