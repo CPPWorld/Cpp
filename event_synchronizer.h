@@ -227,7 +227,7 @@ namespace ns_event_synchronizer{
             }
         }
 
-        void removeEntry(target_id id){
+        void removeEvent(target_id id){
             {
                 std::lock_guard<std::mutex>lock(_executor_map_mtx);
                 if( auto it = _executor_map.find(id);!(it == _executor_map.end())){

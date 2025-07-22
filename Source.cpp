@@ -144,7 +144,7 @@ public:
         synchronizer.post({ "Test_B", "execute", execution_mode::sync });
         synchronizer.post({ "Test_A", "exit",    execution_mode::sync });
         synchronizer.wait();
-        synchronizer.removeEntry("Test_A");
+        synchronizer.removeEvent("Test_A");
 
 
         synchronizer.post({ "Test_B",  "echo",   execution_mode::sync });
@@ -163,7 +163,7 @@ public:
         synchronizer.post({ "Test_B", "start",   execution_mode::sync });
 
         synchronizer.wait();
-        synchronizer.removeEntry("Test_B");
+        synchronizer.removeEvent("Test_B");
 
         synchronizer.post({ "Test_A", "execute", execution_mode::sync });
         synchronizer.post({ "Test_B", "start",   execution_mode::sync });
