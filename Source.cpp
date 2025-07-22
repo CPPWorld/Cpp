@@ -1,5 +1,6 @@
 ﻿#include "event_synchronizer.h"
 #include <iostream>
+#include <syncstream>
 #include <sstream>
 #include <thread>
 using namespace ns_event_synchronizer;
@@ -13,223 +14,219 @@ public:
     virtual ~i_base(){}
 };
 
-class derrived_a:public i_base{
+#define sync_cout std::osyncstream( std::cout)
+
+class Test_A:public i_base{
 public:
-    derrived_a(){
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+    Test_A(){
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
     }
-    ~derrived_a(){
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+    ~Test_A(){
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
     }
     void start()override{
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
     };
     void execute()override{
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
-        std::cout << name_ << "[" << std::this_thread::get_id() << "] timeout" << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "] timeout" << __func__ << std::endl;
     };
     void postprocess(){
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
         //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        std::cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
     };
     void exit()override{
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
     };
 private:
-    std::string name_{"[derrived_a]"};
+    std::string name_{"[Test_A]"};
 };
 
-class derrived_b:public i_base{
+class Test_B:public i_base{
 public:
-    derrived_b(){
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+    Test_B(){
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
     }
-    ~derrived_b(){
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+    ~Test_B(){
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
     }
     void start()override{
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
     };
     void execute()override{
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
         //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        std::cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
     };
     void postprocess(){
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
         //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        std::cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
     };
     void exit()override{
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
     };
 private:
-    std::string name_{"[derrived_b]"};
+    std::string name_{"[Test_B]"};
 };
 int g_number{};
-class random_class{
+class Test_C{
 public:
 
-    void increment(){
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__  << " result=" << ++g_number << std::endl;
+    void increment(int v1, int v2){
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__  << " result=" << (g_number+=(v1+v2)) << std::endl;
     }
 private:
-    std::string name_{"[random_class]"};
+    std::string name_{"[Test_C]"};
 };
 
-class random_class_2{
+class Test_D{
 public:
 
-    void decrement(){
-        std::cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__  << " result=" << --g_number << std::endl;
+    void decrement(int decrement_by){
+        sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__  << " result=" << (g_number-=decrement_by) << std::endl;
     }
 private:
-    std::string name_{"[random_class]"};
+    std::string name_{"[Test_D]"};
 
 };
 
-template<typename T>
-std::shared_ptr<event<T>>  register_events(){
-    auto evt=std::make_shared<event<T>>();
-    evt->add("start",[cmd=evt->command()]{cmd->start();return true;});
-    evt->add("execute",[cmd=evt->command()]{cmd->execute();return true;});
-    evt->add("exit",[cmd=evt->command()]{cmd->exit();return true;});
-    evt->add("postprocess",[cmd=evt->command()]{cmd->postprocess();return true;});
+class Tests {
+    template<typename T>
+    std::shared_ptr<event<T>> register_events(){
+        auto evt=std::make_shared<event<T>>();
+        evt->add("start",[cmd=evt->command()]{cmd->start();return true;});
+        evt->add("execute",[cmd=evt->command()]{cmd->execute();return true;});
+        evt->add("exit",[cmd=evt->command()]{cmd->exit();return true;});
+        evt->add("postprocess",[cmd=evt->command()]{cmd->postprocess();return true;});
 
-    evt->add("echo",[]{std::cout<<"-------------------Echo------------------\n";return true;});
-    return evt;
-}
+        evt->add("echo",[]{sync_cout<<"-------------------Echo------------------\n";return true;});
+        return evt;
+    }
+    std::shared_ptr<event<Test_C>> register_Test_C() {
+        auto evt = std::make_shared<event<Test_C>>();
+        evt->add( "Case_1:increment", [cmd = evt->command()](){ cmd->increment(1,1);return true;});
+        return evt;
+    }
 
-std::shared_ptr<event<random_class>> register_random_events() {
-    auto evt = std::make_shared<event<random_class>>();
-    evt->add( "increment", [cmd = evt->command()](){ cmd->increment();return true;});
-    return evt;
-}
-
-std::shared_ptr<event<random_class_2>> register_random_2_events() {
-    auto evt = std::make_shared<event<random_class_2>>();
-    evt->add( "decrement", [cmd = evt->command()](){ cmd->decrement();return true;});
-    return evt;
-}
-class Test {
+    std::shared_ptr<event<Test_D>> register_Test_D() {
+        auto evt = std::make_shared<event<Test_D>>();
+        evt->add( "Case_1:decrement", [cmd = evt->command()](){ cmd->decrement(1);return true;});
+        return evt;
+    }
 public:
-    int Random(){
+
+    int Test_1(){
+        auto der_a=register_events<Test_A>();
+        auto der_b=register_events<Test_B>();
+
+        ns_event_synchronizer::event_synchronizer synchronizer({
+                {"Test_A",der_a},
+                {"Test_B",der_b}
+            });
+
+        synchronizer.post({ "Test_A", "echo",    execution_mode::sync });
+        synchronizer.post({ "Test_B", "echo",    execution_mode::sync });
+        synchronizer.wait();
+
+        synchronizer.post({ "Test_A", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_B", "postprocess", execution_mode::sync });
+
+        synchronizer.wait();
+
+        synchronizer.post({ "Test_A", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_A", "exit",    execution_mode::sync });
+        synchronizer.wait();
+        synchronizer.removeEntry("Test_A");
+
+
+        synchronizer.post({ "Test_B",  "echo",   execution_mode::sync });
+
+        der_a->remove("execute");
+        der_b->remove("execute");
+
+        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_A", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
+
+        synchronizer.wait();
+        synchronizer.removeEntry("Test_B");
+
+        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_A", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
+        synchronizer.post({ "Test_B", "echo",    execution_mode::sync });
+        synchronizer.post({ "Test_A", "exit", execution_mode::sync });
+        synchronizer.wait();
+
+        synchronizer.shutdown();
+        return 0;
+    }
+    int Test_2(){
         {
-            auto random_=register_random_events();
-            auto random_2=register_random_2_events();
+            auto test_C=register_Test_C();
+            auto test_D=register_Test_D();
 
-            auto evt_reg=std::make_shared<event_registry>();
-            evt_reg->add("random_class", random_);
-            evt_reg->add("random_class_2", random_2);
-
-            ns_event_synchronizer::event_synchronizer synchronizer(std::move(evt_reg));
-
-            for (int i=0;i<100;++i){
-                synchronizer.post({ "random_class",  "increment",    execution_mode::sync });
-                synchronizer.post({ "random_class_2",  "decrement",   execution_mode::sync });
-            }
-            for (int i=0;i<100;++i){
-                synchronizer.post({ "random_class",  "increment",    execution_mode::sync });
-            }
+            ns_event_synchronizer::event_synchronizer synchronizer({
+                {"Test_C", test_C},
+                {"Test_D", test_D}
+            });
 
             for (int i=0;i<100;++i){
-                synchronizer.post({ "random_class_2",  "decrement",   execution_mode::sync });
+                synchronizer.post({ "Test_C",  "Case_1:increment",    execution_mode::sync });
             }
-
+            for (int i=0;i<100;++i){
+                synchronizer.post({ "Test_D",  "Case_1:decrement",   execution_mode::async });
+            }
             synchronizer.wait();
-
             synchronizer.shutdown();
         }
         return 0;
     };
-    int derriveds(){
-        auto der_a=register_events<derrived_a>();
-        auto der_b=register_events<derrived_b>();
-
-        auto evt_reg=std::make_shared<event_registry>();
-        evt_reg->add("derrived_a",der_a);
-        evt_reg->add("derrived_b",der_b);
-
-        ns_event_synchronizer::event_synchronizer synchronizer(std::move(evt_reg));
-
-        synchronizer.post({ "derrived_a", "echo",    execution_mode::sync });
-        synchronizer.post({ "derrived_b", "echo",    execution_mode::sync });
-
-        synchronizer.post({ "derrived_a", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_b", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_a", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_b", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_b", "postprocess", execution_mode::sync });
-
-        synchronizer.wait();
-
-        synchronizer.post({ "derrived_a", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_b", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_a", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_b", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_a", "exit",    execution_mode::sync });
-        synchronizer.wait();
-
-        synchronizer.post({ "derrived_b",  "echo",   execution_mode::sync });
-
-        //der_a->remove("execute");
-        //der_b->remove("execute");
-
-        synchronizer.post({ "derrived_b", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_b", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_a", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_a", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_b", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_a", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_b", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_a", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_b", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_a", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_b", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_b", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_a", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_b", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_b", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_a", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_b", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_a", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_b", "start",   execution_mode::sync });
-        synchronizer.post({ "derrived_b", "execute", execution_mode::sync });
-        synchronizer.post({ "derrived_b", "echo",    execution_mode::sync });
-
-        synchronizer.wait();
-
-        synchronizer.shutdown();
-        return 0;
-    }
 };
 
-std::shared_ptr<event<Test>> register_random(){
-    auto evt=std::make_shared<event<Test>>();
-    evt->add("Random",[cmd=evt->command()](){cmd->Random();return true;});
+std::shared_ptr<event<Tests>> register_Test_1(){
+    auto evt=std::make_shared<event<Tests>>();
+    evt->add("Case_1",[cmd=evt->command()](){cmd->Test_1();return true;});
     return evt;
 }
 
-std::shared_ptr<event<Test>> register_derriveds(){
-    auto evt=std::make_shared<event<Test>>();
-    evt->add("derriveds",[cmd = evt->command()](){cmd->derriveds();return true;});
+std::shared_ptr<event<Tests>> register_Test_2(){
+    auto evt=std::make_shared<event<Tests>>();
+    evt->add("Case_1",[cmd = evt->command()](){cmd->Test_2();return true;});
     return evt;
 }
 
 int main(){
-        auto der_a=register_random();
-        auto der_b=register_derriveds();
+    auto test_1=register_Test_1();
+    auto test_2=register_Test_2();
 
-        auto evt_reg=std::make_shared<event_registry>();
-        evt_reg->add("Random",der_a);
-        evt_reg->add("derriveds",der_b);
+    ns_event_synchronizer::event_synchronizer synchronizer({{"Test_1",test_1}, {"Test_2",test_2}});
+    synchronizer.post({"Test_1","Case_1",execution_mode::sync});
+    synchronizer.post({"Test_2","Case_1",execution_mode::sync});
+    synchronizer.wait();
 
-        ns_event_synchronizer::event_synchronizer synchronizer(std::move(evt_reg));
-        synchronizer.post({"derriveds","derriveds",execution_mode::async});
-        synchronizer.post({"Random","Random",execution_mode::async});
-        synchronizer.wait();
-
-        synchronizer.shutdown();
+    synchronizer.shutdown();
     return 0;
 }
