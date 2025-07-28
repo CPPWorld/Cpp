@@ -11,75 +11,86 @@
 #include <condition_variable>
 
 namespace ns_event_synchronizer{
-    using event_type=std::string; // Alias for event identifiers
-    enum class execution_mode{invalid=-1,async=0,sync}; // execution mode.
+    // Alias for event identifiers
+    using event_id=std::string;
+
+    // execution mode.
+    enum class execution_mode{invalid=-1,async=0,sync};
 
     // Interface for event wrappers that define execution logic
     class i_event{
     public:
-        virtual bool execute(const event_type&)=0; // Execute handler for given event type
-        virtual void add(const event_type&,
-            std::function<bool()>)=0; // Register callback for event type
-        virtual void remove(const event_type& evt)=0;
+        // Execute handler for given event type
+        virtual bool execute(const event_id&)=0;
+
+        // Register callback for event type
+        virtual void add(const event_id&,
+            std::function<bool()>)=0;
+        virtual void remove(const event_id& evt)=0;
         virtual ~i_event(){}
     };
 
     // Generic event class holding command data and event handlers
-    template<typename T>
+    template<typename T = void>
     class event:public i_event{
     public:
-        event():cmd(std::make_shared <T>()){}
-        event(std::initializer_list<std::pair<event_type,
-            std::function<bool()>>> evts)
-            :cmd(std::make_shared <T>()){
-            for (const auto& [type, handler] : evts) {
-                handlers.emplace(type,handler);
+        event(){
+            if constexpr (!std::is_void<T>::value) {
+                cmd = std::make_shared<T>();
             }
         }
         ~event()override=default;
 
         // Execute the corresponding handler based on event type
-        bool execute(const event_type& evt)override{
+        bool execute(const event_id& evt)override{
             std::lock_guard<std::mutex> lock(_mtx);
             auto it=handlers.find(evt);
             return it!=handlers.end()?it->second():false;
         }
 
-        inline std::shared_ptr<T> command(){ return cmd; }
+        template<typename U = T>
+        std::enable_if_t<!std::is_void<U>::value, std::shared_ptr<U>> command() {
+            return cmd;
+        }
 
         // Add handler for event type
-        void add(const event_type& evt,
+        void add(const event_id& evt,
             std::function<bool()> handler)override{
             std::lock_guard<std::mutex> lock(_mtx);
             handlers[evt]=std::move(handler);
         }
         
         // Remove handler for event type
-        void remove(const event_type& evt)override{
+        void remove(const event_id& evt)override{
             std::lock_guard<std::mutex> lock(_mtx);
             handlers.erase(evt);
         }
 
     private:
-        std::shared_ptr<T> cmd; // Command payload object. Used during execute() call.
-        std::mutex _mtx; //sync access to handlers map.
-        std::unordered_map<event_type,
-            std::function<bool()>> handlers; // collection of registered Event handlers.
+         // Command payload object. Used during execute() call.
+        using Cmd = std::conditional_t<std::is_void<T>::value, std::nullptr_t, std::shared_ptr<T>>;
+        Cmd cmd;
+
+
+        std::mutex _mtx;
+        std::unordered_map<event_id,std::function<bool()>> handlers;
     };
 
-    using target_id=std::string;
+    using target=std::string;
 
     // Structure to package data needed for an event execution
     struct event_handler_data{
-        event_type event_type;
+        event_id evt_id;
         execution_mode execution_mode{execution_mode::invalid};
-        std::optional<std::promise<void>> sync_promise; // Used for signaling in sync mode
+
+         // Used for signaling in sync mode
+        std::optional<std::promise<void>> sync_promise;
     };
 
     // Interface for event executor
     class i_executor{
     public:
-        virtual std::future<void> submit(event_type,execution_mode)=0;
+        virtual std::future<void> submit(event_id,execution_mode)=0;
         virtual void shutdown()=0;
         virtual bool is_empty()=0;
         virtual ~i_executor()=default;
@@ -108,13 +119,14 @@ namespace ns_event_synchronizer{
                         data=std::move(_queue.front());
                         _queue.pop();
                     }
-                    if(!event->execute(data.event_type)){ // Run event
+                    // Run event
+                    if(!event->execute(data.evt_id)){
                         // log error
                         // or what to do?
                     }
                     if ((execution_mode::sync==data.execution_mode)&&
                         (data.sync_promise.has_value())){
-                        data.sync_promise->set_value(); // Signal completion
+                        data.sync_promise->set_value();
                     }
                 }while(true);
             });
@@ -122,25 +134,27 @@ namespace ns_event_synchronizer{
 
         ~executor(){
             if (_thread.joinable()){
-                _thread.join(); // Ensure thread shutdown
+                _thread.join();
             }
         }
 
         // Posts a new event to this handler's queue
-        std::future<void> submit(event_type event_type,
+        std::future<void> submit(event_id event_id,
             execution_mode execution_mode)override{
             std::optional<std::promise<void>> promise;
             std::future<void> future;
             if (execution_mode::sync==execution_mode){
                 promise.emplace();
-                future=promise->get_future(); // Capture future for sync execution
+                // Capture future for sync execution
+                future=promise->get_future();
             }
             {
                 std::lock_guard<std::mutex> lock(_mtx);
-                _queue.push({event_type,execution_mode,
+                _queue.push({event_id,execution_mode,
                     std::move(promise)});
             }
-            _cv.notify_one(); // Wake thread
+            // Wake thread
+            _cv.notify_one();
             return future;
         }
 
@@ -162,23 +176,24 @@ namespace ns_event_synchronizer{
         std::condition_variable _cv;
     };
 
-    struct registry_entry {
-        target_id id;
+    struct event_registry{
+        target id;
         std::shared_ptr<ns_event_synchronizer::i_event> handler;
     };
 
     // Manages all event handlers and dispatching logic
     class event_synchronizer{
-    struct event_data{ // Struct for dispatching events across targets
-        target_id _target;
-        event_type _type;
+    // Struct for dispatching events across targets
+    struct event_data{
+        target _target;
+        event_id _type;
         execution_mode _execution_mode{execution_mode::invalid};
     };
     public:
-        event_synchronizer(std::initializer_list<registry_entry> entries){
+        event_synchronizer(std::initializer_list<event_registry> entries){
             for (const auto& [id, handler]:entries){
                 _executor_map.emplace(id,
-                    std::make_unique<executor>(handler));
+                    std::make_shared<executor>(handler));
             }
             _worker_thread=std::thread([this](){
                 while (true){
@@ -187,7 +202,7 @@ namespace ns_event_synchronizer{
                         _cv.wait(lock,[this]{
                             return !_event_queue.empty()||_shutdown.load();
                         });
-                        if (_shutdown.load()){ return std::nullopt; }
+                        if (_shutdown.load()){return std::nullopt;}
                         event_data evt_data=_event_queue.front();
                         _event_queue.pop();
                         return evt_data;
@@ -207,7 +222,8 @@ namespace ns_event_synchronizer{
                     }
                     auto future=executor->submit(command,execution_mode);
                     if (execution_mode::sync==execution_mode) {
-                        future.wait(); // Ensure sync behavior
+                        // Ensure sync behavior
+                        future.wait();
                     }
                 }
                 {
@@ -219,7 +235,7 @@ namespace ns_event_synchronizer{
             });
         }
 
-        void addEvent(registry_entry entry){
+        void addEvent(event_registry entry){
             {
                 std::lock_guard<std::mutex>lock(_executor_map_mtx);
                 _executor_map.emplace(entry.id,
@@ -227,7 +243,7 @@ namespace ns_event_synchronizer{
             }
         }
 
-        void removeEvent(target_id id){
+        void removeEvent(target id){
             {
                 std::lock_guard<std::mutex>lock(_executor_map_mtx);
                 if( auto it = _executor_map.find(id);!(it == _executor_map.end())){
@@ -257,12 +273,14 @@ namespace ns_event_synchronizer{
         }
 
         // Blocks until all events are fully processed
-        void wait(){ // TODO : avoid polling mechanism with another approach
+         // TODO : avoid polling mechanism with another approach
+        void wait(){
             bool exit{false};
             while (!exit){
                 std::unique_lock<std::mutex> lock(_wait_mtx);
+                 // polling mechanism to identify any events available
                 _wait_cv.wait_for(lock,std::chrono::microseconds(100),
-                    [this,&exit]{ // polling mechanism to identify any events available
+                    [this,&exit]{
                     if (!_event_queue.empty()){
                         return false;
                     }
@@ -281,15 +299,19 @@ namespace ns_event_synchronizer{
 
         void shutdown(){
             _shutdown.store( true );
-            _cv.notify_all(); // Unblock all wait
+
+             // Unblock all wait
+            _cv.notify_all();
         }
 
     private:
+         // One Executor/target
         std::mutex _executor_map_mtx;
-        std::unordered_map<target_id,
-            std::shared_ptr<i_executor>> _executor_map; // One Executor/target
+        std::unordered_map<target,
+            std::shared_ptr<i_executor>> _executor_map;
 
-        std::thread _worker_thread; // for gracefull shutdown
+        // for gracefull shutdown
+        std::thread _worker_thread;
         std::atomic_bool _shutdown{false};
 
         std::mutex _mtx;

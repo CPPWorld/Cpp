@@ -56,12 +56,12 @@ public:
     };
     void execute()override{
         sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
-        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         sync_cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
     };
     void postprocess(){
         sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
-        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        std::this_thread::sleep_for(std::chrono::milliseconds(10000));
         sync_cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
     };
     void exit()override{
@@ -70,6 +70,7 @@ public:
 private:
     std::string name_{"[Test_B]"};
 };
+
 int g_number{};
 class Test_C{
 public:
@@ -122,9 +123,9 @@ public:
         auto der_b=register_events<Test_B>();
 
         ns_event_synchronizer::event_synchronizer synchronizer({
-                {"Test_A",der_a},
-                {"Test_B",der_b}
-            });
+            {"Test_A",der_a},
+            {"Test_B",der_b}
+        });
 
         synchronizer.post({ "Test_A", "echo",    execution_mode::sync });
         synchronizer.post({ "Test_B", "echo",    execution_mode::sync });
@@ -218,15 +219,62 @@ std::shared_ptr<event<Tests>> register_Test_2(){
     return evt;
 }
 
+
+bool handler_A() {
+    std::cout << "[handler_A] Executed.\n";
+    return true;
+}
+
+bool handler_B() {
+    std::cout << "[handler_B] Executed.\n";
+    return true;
+}
+
 int main(){
+    {
     auto test_1=register_Test_1();
     auto test_2=register_Test_2();
 
     ns_event_synchronizer::event_synchronizer synchronizer({{"Test_1",test_1}, {"Test_2",test_2}});
-    synchronizer.post({"Test_1","Case_1",execution_mode::sync});
-    synchronizer.post({"Test_2","Case_1",execution_mode::sync});
+    synchronizer.post({"Test_1","Case_1",execution_mode::async});
+    synchronizer.post({"Test_2","Case_1",execution_mode::async});
     synchronizer.wait();
 
     synchronizer.shutdown();
+    }
+    {
+        // Step 1: Create event handlers
+    auto eventA = std::make_shared<event<>>();
+    auto eventB = std::make_shared<event<>>();
+
+    eventA->add("evt1", handler_A);
+    eventB->add("evt2", handler_B);
+
+    // Step 2: Register events
+    event_registry entryA{ "targetA", eventA };
+    event_registry entryB{ "targetB", eventB };
+
+    event_synchronizer synchronizer{ entryA, entryB };
+
+    // Step 3: Post async events
+    synchronizer.post({ "targetA", "evt1", execution_mode::async });
+    synchronizer.post({ "targetB", "evt2", execution_mode::async });
+
+    // Step 4: Post sync event
+    synchronizer.post({ "targetA", "evt1", execution_mode::sync });
+
+    // Step 5: Wait until all processing completes
+    synchronizer.wait();
+
+    // Step 6: Remove and test ignored event
+    synchronizer.removeEvent("targetA");
+    synchronizer.post({ "targetA", "evt1", execution_mode::async });
+
+    // Wait and shutdown
+    synchronizer.wait();
+    synchronizer.shutdown();
+    }
+    std::cout << "All tests completed.\n";
+
     return 0;
 }
