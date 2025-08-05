@@ -191,8 +191,7 @@ namespace ns_event_synchronizer{
     public:
         event_synchronizer(std::initializer_list<event_registry> entries){
             for (const auto& [id, handler]:entries){
-                _executor_umap.emplace(id,
-                    std::make_shared<executor>(handler));
+                _executor_umap.emplace(id,std::make_shared<executor>(handler));
             }
             _synchronizer_thread=std::thread([this](){
                 while (true){
@@ -302,6 +301,7 @@ namespace ns_event_synchronizer{
             _shutdown.store( true );
             // Unblock all wait
             _event_cv.notify_all();
+            _wait_cv.notify_all();
         }
 
         inline bool is_alive() const noexcept{
