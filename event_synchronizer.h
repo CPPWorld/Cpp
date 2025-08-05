@@ -7,6 +7,7 @@
 #include <future>
 #include <optional>
 #include <functional>
+#include <shared_mutex>
 #include <unordered_map>
 #include <condition_variable>
 
@@ -24,8 +25,7 @@ namespace ns_event_synchronizer{
         virtual bool execute(const event_id&)=0;
 
         // Register callback for event type
-        virtual void add(const event_id&,
-            std::function<bool()>)=0;
+        virtual void add(const event_id&,std::function<bool()>)=0;
         virtual void remove(const event_id& evt)=0;
         virtual ~i_event(){}
     };
@@ -42,38 +42,37 @@ namespace ns_event_synchronizer{
         ~event()override=default;
 
         // Execute the corresponding handler based on event type
-        bool execute(const event_id& evt)override{
-            std::lock_guard<std::mutex> lock(_mtx);
-            auto it=handlers.find(evt);
-            return it!=handlers.end()?it->second():false;
+        bool execute(const event_id& evt) override{
+            std::lock_guard<std::mutex> lock(_event_umap_mtx);
+            auto it=_event_umap.find(evt);
+            return it!=_event_umap.end()?it->second():false;
         }
 
         template<typename U = T>
-        std::enable_if_t<!std::is_void<U>::value, std::shared_ptr<U>> command() {
+        std::enable_if_t<!std::is_void<U>::value, std::shared_ptr<U>> command() const{
             return cmd;
         }
 
         // Add handler for event type
-        void add(const event_id& evt,
-            std::function<bool()> handler)override{
-            std::lock_guard<std::mutex> lock(_mtx);
-            handlers[evt]=std::move(handler);
+        void add(const event_id& evt,std::function<bool()> func)override{
+            std::lock_guard<std::mutex> lock(_event_umap_mtx);
+            _event_umap[evt]=std::move(func);
         }
         
         // Remove handler for event type
         void remove(const event_id& evt)override{
-            std::lock_guard<std::mutex> lock(_mtx);
-            handlers.erase(evt);
+            std::lock_guard<std::mutex> lock(_event_umap_mtx);
+            _event_umap.erase(evt);
         }
 
     private:
          // Command payload object. Used during execute() call.
-        using Cmd = std::conditional_t<std::is_void<T>::value, std::nullptr_t, std::shared_ptr<T>>;
+        using Cmd = std::conditional_t<std::is_void<T>::value,
+            std::nullptr_t, std::shared_ptr<T>>;
         Cmd cmd;
 
-
-        std::mutex _mtx;
-        std::unordered_map<event_id,std::function<bool()>> handlers;
+        std::mutex _event_umap_mtx;
+        std::unordered_map<event_id,std::function<bool()>> _event_umap;
     };
 
     using target=std::string;
@@ -91,8 +90,8 @@ namespace ns_event_synchronizer{
     class i_executor{
     public:
         virtual std::future<void> submit(event_id,execution_mode)=0;
-        virtual void shutdown()=0;
-        virtual bool is_empty()=0;
+        virtual void shutdown()noexcept=0;
+        virtual bool is_empty()noexcept=0;
         virtual ~i_executor()=default;
     };
 
@@ -101,23 +100,23 @@ namespace ns_event_synchronizer{
     public:
         explicit executor(std::shared_ptr<i_event> evt){
             // One execetor/item in event registry.
-            _thread=std::thread([event=std::move(evt),this](){
+            _executor_thread=std::thread([event=std::move(evt),this](){
                 if (!event){
                     return;
                 }
                 do{
                     event_handler_data data;
                     {
-                        std::unique_lock<std::mutex> lock(_mtx);
+                        std::unique_lock<std::mutex> lock(_evt_hndlr_mtx);
                          // Block until an event arrives or shutdown
                         _cv.wait(lock,[this]{
-                            return !_queue.empty()||_shutdown;
+                            return !_evt_hndlr_q.empty()||_shutdown;
                         });
-                        if (_shutdown){
+                        if (_shutdown.load()){
                             break;
                         }
-                        data=std::move(_queue.front());
-                        _queue.pop();
+                        data=std::move(_evt_hndlr_q.front());
+                        _evt_hndlr_q.pop();
                     }
                     // Run event
                     if(!event->execute(data.evt_id)){
@@ -133,14 +132,14 @@ namespace ns_event_synchronizer{
         }
 
         ~executor(){
-            if (_thread.joinable()){
-                _thread.join();
+            if (_executor_thread.joinable()){
+                _executor_thread.join();
             }
         }
 
         // Posts a new event to this handler's queue
         std::future<void> submit(event_id event_id,
-            execution_mode execution_mode)override{
+            execution_mode execution_mode) override{
             std::optional<std::promise<void>> promise;
             std::future<void> future;
             if (execution_mode::sync==execution_mode){
@@ -149,8 +148,8 @@ namespace ns_event_synchronizer{
                 future=promise->get_future();
             }
             {
-                std::lock_guard<std::mutex> lock(_mtx);
-                _queue.push({event_id,execution_mode,
+                std::lock_guard<std::mutex> lock(_evt_hndlr_mtx);
+                _evt_hndlr_q.push({event_id,execution_mode,
                     std::move(promise)});
             }
             // Wake thread
@@ -158,22 +157,22 @@ namespace ns_event_synchronizer{
             return future;
         }
 
-        bool is_empty()override{
-            std::unique_lock<std::mutex> lock(_mtx);
-            return _queue.empty();
+        bool is_empty()noexcept override{
+            std::unique_lock<std::mutex> lock(_evt_hndlr_mtx);
+            return _evt_hndlr_q.empty();
         }
 
-        void shutdown()override{
+        void shutdown()noexcept override{
             _shutdown=true;
             _cv.notify_all();
         }
 
     private:
-        std::thread _thread;
-        std::atomic_bool _shutdown{false};
-        std::queue<event_handler_data> _queue;
-        std::mutex _mtx;
         std::condition_variable _cv;
+        std::queue<event_handler_data> _evt_hndlr_q;
+        std::mutex _evt_hndlr_mtx;
+        std::atomic_bool _shutdown{false};
+        std::thread _executor_thread;
     };
 
     struct event_registry{
@@ -192,14 +191,14 @@ namespace ns_event_synchronizer{
     public:
         event_synchronizer(std::initializer_list<event_registry> entries){
             for (const auto& [id, handler]:entries){
-                _executor_map.emplace(id,
+                _executor_umap.emplace(id,
                     std::make_shared<executor>(handler));
             }
-            _worker_thread=std::thread([this](){
+            _synchronizer_thread=std::thread([this](){
                 while (true){
                     auto get_event_data=[this]()->std::optional<event_data>{
-                        std::unique_lock<std::mutex> lock(_mtx);
-                        _cv.wait(lock,[this]{
+                        std::unique_lock<std::mutex> lock(_event_queue_mtx);
+                        _event_cv.wait(lock,[this]{
                             return !_event_queue.empty()||_shutdown.load();
                         });
                         if (_shutdown.load()){return std::nullopt;}
@@ -213,83 +212,85 @@ namespace ns_event_synchronizer{
                     std::shared_ptr<i_executor> executor;
                     auto& [target, command, execution_mode]=*get_event_data;
                     {
-                        std::lock_guard<std::mutex>lock(_executor_map_mtx);
-                        const auto it=_executor_map.find(target);
-                        if (it==_executor_map.end()){
+                        std::shared_lock lock(_executor_umap_mtx);
+                        if (const auto it=_executor_umap.find(target);
+                            it!=_executor_umap.end()){
+                            executor = it->second;
+                        }
+                        else{
                             continue; // Unknown target, skip it
                         }
-                        executor = it->second;
                     }
-                    auto future=executor->submit(command,execution_mode);
-                    if (execution_mode::sync==execution_mode) {
+                    if (auto future=executor->submit(command,execution_mode);
+                        execution_mode::sync==execution_mode) {
                         // Ensure sync behavior
                         future.wait();
                     }
                 }
-                {
-                    std::lock_guard<std::mutex>lock(_executor_map_mtx);
-                    for (auto& executor:_executor_map){
-                        executor.second->shutdown();
-                    }
+                // Shutting down
+                for (std::shared_lock lock(_executor_umap_mtx);
+                    auto& executor:_executor_umap){
+                    executor.second->shutdown();
                 }
             });
         }
 
         void addEvent(event_registry entry){
+            if (is_alive())
             {
-                std::lock_guard<std::mutex>lock(_executor_map_mtx);
-                _executor_map.emplace(entry.id,
-                    std::make_unique<executor>(entry.handler));
+                std::unique_lock lock(_executor_umap_mtx);
+                _executor_umap.emplace(entry.id,
+                    std::make_shared<executor>(entry.handler));
             }
         }
 
         void removeEvent(target id){
+            if (is_alive())
             {
-                std::lock_guard<std::mutex>lock(_executor_map_mtx);
-                if( auto it = _executor_map.find(id);!(it == _executor_map.end())){
+                std::unique_lock lock(_executor_umap_mtx);
+                if( auto it = _executor_umap.find(id);
+                    !(it == _executor_umap.end())){
                     it->second->shutdown();
-                    _executor_map.erase(id);
+                    _executor_umap.erase(id);
                 }
             }
         }
 
         ~event_synchronizer(){
             shutdown();
-            if (_worker_thread.joinable()){
-                _worker_thread.join();
+            if (_synchronizer_thread.joinable()){
+                _synchronizer_thread.join();
             }
         }
 
         // Post a new event into the dispatcher queue
         void post(const event_data& cmd){
-            if (_shutdown.load()){
-                return;
-            }
+            if (is_alive())
             {
-                std::lock_guard<std::mutex> lock(_mtx);
+                std::lock_guard<std::mutex> lock(_event_queue_mtx);
                 _event_queue.push(cmd);
             }
-            _cv.notify_one();
+            _event_cv.notify_one();
         }
 
         // Blocks until all events are fully processed
-         // TODO : avoid polling mechanism with another approach
+        // TODO : avoid polling mechanism with another approach
         void wait(){
             bool exit{false};
             while (!exit){
                 std::unique_lock<std::mutex> lock(_wait_mtx);
-                 // polling mechanism to identify any events available
-                _wait_cv.wait_for(lock,std::chrono::microseconds(100),
+                // polling mechanism to identify any events available
+                _wait_cv.wait_for(lock,std::chrono::milliseconds(100),
                     [this,&exit]{
-                    if (!_event_queue.empty()){
+                    if (std::lock_guard<std::mutex> lock(_event_queue_mtx);
+                        !_event_queue.empty()){
                         return false;
                     }
-                    {   // check if all the active executor queue is empty.
-                        std::lock_guard<std::mutex>lock(_executor_map_mtx);
-                        for (auto& event_hndlr:_executor_map){
-                            if (!event_hndlr.second->is_empty()){
-                                return false;
-                            }
+                    // check if all the active executor queue is empty.
+                    for (std::shared_lock lock(_executor_umap_mtx);
+                        auto& executor:_executor_umap){
+                        if (!executor.second->is_empty()){
+                            return false;
                         }
                     }
                     return exit=true;
@@ -297,26 +298,29 @@ namespace ns_event_synchronizer{
             }
         }
 
-        void shutdown(){
+        void shutdown() noexcept{
             _shutdown.store( true );
+            // Unblock all wait
+            _event_cv.notify_all();
+        }
 
-             // Unblock all wait
-            _cv.notify_all();
+        inline bool is_alive() const noexcept{
+            return !_shutdown.load();
         }
 
     private:
-         // One Executor/target
-        std::mutex _executor_map_mtx;
-        std::unordered_map<target,
-            std::shared_ptr<i_executor>> _executor_map;
+        // One Executor/target
+        std::unordered_map<target,std::shared_ptr<i_executor>> _executor_umap;
+        // std::shared_mutex to allow parallel read access in wait() & _synchronizer_thread
+        std::shared_mutex _executor_umap_mtx;
 
         // for gracefull shutdown
-        std::thread _worker_thread;
         std::atomic_bool _shutdown{false};
+        std::thread _synchronizer_thread;
 
-        std::mutex _mtx;
-        std::condition_variable _cv;
         std::queue<event_data> _event_queue;
+        std::mutex _event_queue_mtx;
+        std::condition_variable _event_cv;
 
         std::mutex _wait_mtx;
         std::condition_variable _wait_cv;
