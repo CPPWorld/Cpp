@@ -11,7 +11,7 @@
 #include <unordered_map>
 #include <condition_variable>
 
-namespace ns_event_synchronizer{
+namespace roymathew::ns_event_synchronizer{
     // Alias for event identifiers
     using event_id=std::string;
 

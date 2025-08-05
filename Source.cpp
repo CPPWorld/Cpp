@@ -3,7 +3,7 @@
 #include <syncstream>
 #include <sstream>
 #include <thread>
-using namespace ns_event_synchronizer;
+using namespace roymathew::ns_event_synchronizer;
 
 // Interface for subjects that respond to event triggers
 class i_base {
@@ -122,7 +122,7 @@ public:
         auto der_a=register_events<Test_A>();
         auto der_b=register_events<Test_B>();
 
-        ns_event_synchronizer::event_synchronizer synchronizer({
+        event_synchronizer synchronizer({
             {"Test_A",der_a},
             {"Test_B",der_b}
         });
@@ -189,7 +189,7 @@ public:
             auto test_C=register_Test_C();
             auto test_D=register_Test_D();
 
-            ns_event_synchronizer::event_synchronizer synchronizer({
+            event_synchronizer synchronizer({
                 {"Test_C", test_C},
                 {"Test_D", test_D}
             });
@@ -238,7 +238,7 @@ int main(){
         auto test_1=register_Test_1();
         auto test_2=register_Test_2();
 
-        ns_event_synchronizer::event_synchronizer synchronizer({{"Test_1",test_1}, {"Test_2",test_2}});
+        event_synchronizer synchronizer({{"Test_1",test_1}, {"Test_2",test_2}});
         synchronizer.post({"Test_1","Case_1",execution_mode::async});
         synchronizer.post({"Test_2","Case_1",execution_mode::async});
         synchronizer.wait();
