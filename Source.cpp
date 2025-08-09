@@ -196,6 +196,8 @@ public:
 
             for (int i=0;i<100;++i){
                 synchronizer.post({ "Test_C",  "Case_1:increment",    execution_mode::sync });
+                synchronizer.post({ "Test_D",  "Case_1:decrement",   execution_mode::sync });
+
 
             }
 
