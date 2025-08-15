@@ -174,7 +174,7 @@ namespace roymathew::ns_event_synchronizer{
                         }
                     }
 
-                    // Exit any waits
+                    // Thread exiting, so exit any waits
                     std::scoped_lock lock(_evt_hndlr_mtx);
                     {
                         _is_active = false;
@@ -298,7 +298,7 @@ namespace roymathew::ns_event_synchronizer{
                         }
                     }
                 }
-                // Shutting down
+                // Thread exiting, so shutdown
                 for (std::shared_lock lock(_executor_umap_mtx);
                     auto& executor:_executors){
                     executor.second->shutdown();

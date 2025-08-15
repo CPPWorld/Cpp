@@ -110,18 +110,14 @@ class Tests {
         evt->add( "Case_1:decrement", [cmd = evt->command()](index id){ sync_cout<< id << " ";cmd->decrement(1);return true;});
         return evt;
     }
+
 public:
 
     int Test_1(){
         auto der_a=register_events<Test_A>();
         auto der_b=register_events<Test_B>();
 
-        event_synchronizer synchronizer({
-            {"Test_A",der_a},
-            {"Test_B",der_b}
-        });
-
-        event_cmd workflow[] = {
+        event_cmd workflow_async[] = {
             { "Test_A", "echo",        execution_mode::async },
             { "Test_B", "echo",        execution_mode::async },
             { "Test_A", "start",       execution_mode::async },
@@ -140,39 +136,87 @@ public:
             { "Test_B", "exit",        execution_mode::async }
         };
 
-        const auto CMD_COUNT=sizeof(workflow)/sizeof(event_cmd);
-        for( auto i=0;i<3;++i){
-            for (auto j = 0; j < CMD_COUNT; ++j){
-                synchronizer.post(workflow[j]);
-            }
-            synchronizer.wait(); // wait for all events to complete
-        }
+        event_cmd workflow_sync[] = {
+            { "Test_A", "echo",        execution_mode::sync },
+            { "Test_B", "echo",        execution_mode::sync },
+            { "Test_A", "start",       execution_mode::sync },
+            { "Test_B", "start",       execution_mode::sync },
+            { "Test_A", "execute",     execution_mode::sync },
+            { "Test_B", "execute",     execution_mode::sync },
+            { "Test_A", "execute",     execution_mode::sync },
+            { "Test_B", "execute",     execution_mode::sync },
+            { "Test_A", "execute",     execution_mode::sync },
+            { "Test_B", "execute",     execution_mode::sync },
+            { "Test_A", "execute",     execution_mode::sync },
+            { "Test_B", "execute",     execution_mode::sync },
+            { "Test_A", "postprocess", execution_mode::sync },
+            { "Test_B", "postprocess", execution_mode::sync },
+            { "Test_A", "exit",        execution_mode::sync },
+            { "Test_B", "exit",        execution_mode::sync }
+        };
 
-        synchronizer.remove("Test_A");// Remove a target 
-        for( auto i=0;i<3;++i){
-            for (auto j = 0; j < CMD_COUNT; ++j){
-                synchronizer.post(workflow[j]);
-            }
-            synchronizer.wait();
-        }
+        event_cmd workflow_mix[] = {
+            { "Test_A", "echo",        execution_mode::sync },
+            { "Test_B", "echo",        execution_mode::async },
+            { "Test_A", "start",       execution_mode::sync },
+            { "Test_B", "start",       execution_mode::async },
+            { "Test_A", "execute",     execution_mode::sync },
+            { "Test_B", "execute",     execution_mode::async },
+            { "Test_A", "execute",     execution_mode::sync },
+            { "Test_B", "execute",     execution_mode::async },
+            { "Test_A", "execute",     execution_mode::async },
+            { "Test_B", "execute",     execution_mode::async },
+            { "Test_A", "execute",     execution_mode::async },
+            { "Test_B", "execute",     execution_mode::async },
+            { "Test_A", "postprocess", execution_mode::async },
+            { "Test_B", "postprocess", execution_mode::sync },
+            { "Test_A", "exit",        execution_mode::sync },
+            { "Test_B", "exit",        execution_mode::sync }
+        };
 
-        synchronizer.add({"Test_A",der_a});// Add new Target
-        synchronizer.remove("Test_B");
-        for( auto i=0;i<3;++i){
-            for (auto j = 0; j < CMD_COUNT; ++j){
-                synchronizer.post(workflow[j]);
+    auto Test = [&](const event_cmd* workflow, const size_t count) {
+            event_synchronizer synchronizer({
+                {"Test_A",der_a},
+                {"Test_B",der_b}
+            });
+            const auto CMD_COUNT=count;
+            for( auto i=0;i<3;++i){
+                for (auto j = 0; j < CMD_COUNT; ++j){
+                    synchronizer.post(workflow[j]);
+                }
+                synchronizer.wait(); // wait for all events to complete
             }
-            synchronizer.wait(); // Test code
-        }
 
-        der_a->remove("execute");// remove a specific event of a target
-        for( auto i=0;i<3;++i){
-            for (auto j = 0; j < CMD_COUNT; ++j){
-                synchronizer.post(workflow[j]);
+            synchronizer.remove("Test_A");// Remove a target 
+            for( auto i=0;i<3;++i){
+                for (auto j = 0; j < CMD_COUNT; ++j){
+                    synchronizer.post(workflow[j]);
+                }
+                synchronizer.wait();
             }
-            synchronizer.wait(); // Test code
-        }
-        synchronizer.shutdown();
+
+            synchronizer.add({"Test_A",der_a});// Add new Target
+            synchronizer.remove("Test_B");
+            for( auto i=0;i<3;++i){
+                for (auto j = 0; j < CMD_COUNT; ++j){
+                    synchronizer.post(workflow[j]);
+                }
+                synchronizer.wait(); // Test code
+            }
+
+            der_a->remove("execute");// remove a specific event of a target
+            for( auto i=0;i<3;++i){
+                for (auto j = 0; j < CMD_COUNT; ++j){
+                    synchronizer.post(workflow[j]);
+                }
+                synchronizer.wait(); // Test code
+            }
+            synchronizer.shutdown();
+        };
+        Test(workflow_async, sizeof(workflow_async)/sizeof(event_cmd));
+        Test(workflow_sync, sizeof(workflow_sync)/sizeof(event_cmd));
+        Test(workflow_mix, sizeof(workflow_mix)/sizeof(event_cmd));
+
         return 0;
     }
     int Test_2(){
@@ -242,6 +286,7 @@ int main(){
 
         synchronizer.shutdown();
     }
+    // Few more Testings
     {
         // Step 1: Create event handlers
         auto eventA = std::make_shared<event<>>();
