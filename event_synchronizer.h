@@ -23,7 +23,6 @@ namespace roymathew::ns_event_synchronizer{
     public:
         // Execute handler for given event type
         virtual bool execute(const event_id&)=0;
-
         // Register callback for event type
         virtual void add(const event_id&,std::function<bool()>)=0;
         virtual void remove(const event_id& evt)=0;
@@ -39,6 +38,7 @@ namespace roymathew::ns_event_synchronizer{
                 cmd = std::make_shared<T>();
             }
         }
+
         ~event()override=default;
 
         // Execute the corresponding handler based on event type
@@ -63,7 +63,7 @@ namespace roymathew::ns_event_synchronizer{
         
         // Remove handler for event type
         void remove(const event_id& evt)override{
-            std::unique_lock lock(_handlers_mtx);
+            std::scoped_lock lock(_handlers_mtx);
             _handlers.erase(evt);
         }
 
@@ -133,13 +133,18 @@ namespace roymathew::ns_event_synchronizer{
                                 // log error
                                 // or what to do?
                             }
+                            if ((execution_mode::sync==data.execution_mode)&&
+                                (data.sync_promise.has_value())){
+                                data.sync_promise->set_value();
+                            }
                         }
                         catch (...) {
+                            if ((execution_mode::sync==data.execution_mode)&&
+                                (data.sync_promise.has_value())){
+                                data.sync_promise->set_exception(
+                                    std::current_exception());
+                            }
                             // log error
-                        }
-                        if ((execution_mode::sync==data.execution_mode)&&
-                            (data.sync_promise.has_value())){
-                            data.sync_promise->set_value();
                         }
                         // Mark state of executor to inactive
                         {
@@ -152,6 +157,7 @@ namespace roymathew::ns_event_synchronizer{
                     }
 
                     // Exit any waits
+                    std::scoped_lock lock(_evt_hndlr_mtx);
                     {
                         _is_active = false;
                         _is_active_cv.notify_all();

@@ -56,7 +56,7 @@ public:
     };
     void execute()override{
         sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
         sync_cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
     };
     void postprocess(){
@@ -135,50 +135,50 @@ public:
         synchronizer.post({ "Test_B", "start",   execution_mode::sync });
         synchronizer.post({ "Test_A", "execute", execution_mode::sync });
         synchronizer.post({ "Test_B", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "postprocess", execution_mode::sync });
+        synchronizer.post({ "Test_B", "postprocess", execution_mode::async });
 
-        synchronizer.wait();
+        //synchronizer.wait();
 
-        synchronizer.post({ "Test_A", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_A", "exit",    execution_mode::sync });
-        synchronizer.wait();
-        synchronizer.removeEvent("Test_A");
+        synchronizer.post({ "Test_A", "start",   execution_mode::async });
+        synchronizer.post({ "Test_B", "start",   execution_mode::async });
+        synchronizer.post({ "Test_A", "execute", execution_mode::async });
+        synchronizer.post({ "Test_B", "execute", execution_mode::async });
+        synchronizer.post({ "Test_A", "exit",    execution_mode::async });
+        //synchronizer.wait();
+        //synchronizer.removeEvent("Test_A");
 
 
-        synchronizer.post({ "Test_B",  "echo",   execution_mode::sync });
+        synchronizer.post({ "Test_B",  "echo",   execution_mode::async });
 
-        der_a->remove("execute");
-        der_b->remove("execute");
+        //der_a->remove("execute");
+        //der_b->remove("execute");
 
-        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_A", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
+        synchronizer.post({ "Test_B", "start",   execution_mode::async });
+        synchronizer.post({ "Test_B", "execute", execution_mode::async });
+        synchronizer.post({ "Test_A", "start",   execution_mode::async });
+        synchronizer.post({ "Test_A", "execute", execution_mode::async });
+        synchronizer.post({ "Test_B", "start",   execution_mode::async });
+        synchronizer.post({ "Test_A", "execute", execution_mode::async });
+        synchronizer.post({ "Test_B", "start",   execution_mode::async });
+        synchronizer.post({ "Test_A", "execute", execution_mode::async });
+        synchronizer.post({ "Test_B", "start",   execution_mode::async });
 
-        synchronizer.wait();
-        synchronizer.removeEvent("Test_B");
+        //synchronizer.wait();
+        //synchronizer.removeEvent("Test_B");
 
-        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_A", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "echo",    execution_mode::sync });
-        synchronizer.post({ "Test_A", "exit", execution_mode::sync });
+        synchronizer.post({ "Test_A", "execute", execution_mode::async });
+        synchronizer.post({ "Test_B", "start",   execution_mode::async });
+        synchronizer.post({ "Test_B", "execute", execution_mode::async });
+        synchronizer.post({ "Test_A", "start",   execution_mode::async });
+        synchronizer.post({ "Test_B", "execute", execution_mode::async });
+        synchronizer.post({ "Test_B", "start",   execution_mode::async });
+        synchronizer.post({ "Test_A", "execute", execution_mode::async });
+        synchronizer.post({ "Test_B", "start",   execution_mode::async });
+        synchronizer.post({ "Test_A", "execute", execution_mode::async });
+        synchronizer.post({ "Test_B", "start",   execution_mode::async });
+        synchronizer.post({ "Test_B", "execute", execution_mode::async });
+        synchronizer.post({ "Test_B", "echo",    execution_mode::async });
+        synchronizer.post({ "Test_A", "exit", execution_mode::async });
         synchronizer.wait();
 
         synchronizer.shutdown();
@@ -242,7 +242,7 @@ int main(){
 
         event_synchronizer synchronizer({{"Test_1",test_1}, {"Test_2",test_2}});
         synchronizer.post({"Test_1","Case_1",execution_mode::async});
-        synchronizer.post({"Test_2","Case_1",execution_mode::async});
+        //synchronizer.post({"Test_2","Case_1",execution_mode::async});
         synchronizer.wait();
 
         synchronizer.shutdown();
