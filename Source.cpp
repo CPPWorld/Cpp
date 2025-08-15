@@ -29,12 +29,9 @@ public:
     };
     void execute()override{
         sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
-        sync_cout << name_ << "[" << std::this_thread::get_id() << "] timeout" << __func__ << std::endl;
     };
     void postprocess(){
         sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
-        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        sync_cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
     };
     void exit()override{
         sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
@@ -56,13 +53,10 @@ public:
     };
     void execute()override{
         sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
-        //std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-        sync_cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
     };
     void postprocess(){
         sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
-        std::this_thread::sleep_for(std::chrono::milliseconds(10000));
-        sync_cout << name_ << "[" << std::this_thread::get_id() << "] timeout " << __func__ << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000)); // simulate payload
     };
     void exit()override{
         sync_cout << name_ << "[" << std::this_thread::get_id() << "]" << __func__ << std::endl;
@@ -97,23 +91,23 @@ class Tests {
     template<typename T>
     std::shared_ptr<event<T>> register_events(){
         auto evt=std::make_shared<event<T>>();
-        evt->add("start",[cmd=evt->command()]{cmd->start();return true;});
-        evt->add("execute",[cmd=evt->command()]{cmd->execute();return true;});
-        evt->add("exit",[cmd=evt->command()]{cmd->exit();return true;});
-        evt->add("postprocess",[cmd=evt->command()]{cmd->postprocess();return true;});
+        evt->add("start",[cmd=evt->command()](index id){sync_cout<< id << " ";cmd->start();return true;});
+        evt->add("execute",[cmd=evt->command()](index id){sync_cout<< id << " ";cmd->execute();return true;});
+        evt->add("exit",[cmd=evt->command()](index id){sync_cout<< id << " ";cmd->exit();return true;});
+        evt->add("postprocess",[cmd=evt->command()](index id){sync_cout<< id << " ";cmd->postprocess();return true;});
 
-        evt->add("echo",[]{sync_cout<<"-------------------Echo------------------\n";return true;});
+        evt->add("echo",[](index id){sync_cout<< id << " ";sync_cout<<"-------------------Echo------------------\n";return true;});
         return evt;
     }
     std::shared_ptr<event<Test_C>> register_Test_C() {
         auto evt = std::make_shared<event<Test_C>>();
-        evt->add( "Case_1:increment", [cmd = evt->command()](){ cmd->increment(1,0);return true;});
+        evt->add( "Case_1:increment", [cmd = evt->command()](index id){ sync_cout<< id << " ";cmd->increment(1,0);return true;});
         return evt;
     }
 
     std::shared_ptr<event<Test_D>> register_Test_D() {
         auto evt = std::make_shared<event<Test_D>>();
-        evt->add( "Case_1:decrement", [cmd = evt->command()](){ cmd->decrement(1);return true;});
+        evt->add( "Case_1:decrement", [cmd = evt->command()](index id){ sync_cout<< id << " ";cmd->decrement(1);return true;});
         return evt;
     }
 public:
@@ -127,60 +121,57 @@ public:
             {"Test_B",der_b}
         });
 
-        synchronizer.post({ "Test_A", "echo",    execution_mode::sync });
-        synchronizer.post({ "Test_B", "echo",    execution_mode::sync });
-        synchronizer.wait();
+        event_cmd workflow[] = {
+            { "Test_A", "echo",        execution_mode::async },
+            { "Test_B", "echo",        execution_mode::async },
+            { "Test_A", "start",       execution_mode::async },
+            { "Test_B", "start",       execution_mode::async },
+            { "Test_A", "execute",     execution_mode::async },
+            { "Test_B", "execute",     execution_mode::async },
+            { "Test_A", "execute",     execution_mode::async },
+            { "Test_B", "execute",     execution_mode::async },
+            { "Test_A", "execute",     execution_mode::async },
+            { "Test_B", "execute",     execution_mode::async },
+            { "Test_A", "execute",     execution_mode::async },
+            { "Test_B", "execute",     execution_mode::async },
+            { "Test_A", "postprocess", execution_mode::async },
+            { "Test_B", "postprocess", execution_mode::async },
+            { "Test_A", "exit",        execution_mode::async },
+            { "Test_B", "exit",        execution_mode::async }
+        };
 
-        synchronizer.post({ "Test_A", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_B", "start",   execution_mode::sync });
-        synchronizer.post({ "Test_A", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "execute", execution_mode::sync });
-        synchronizer.post({ "Test_B", "postprocess", execution_mode::async });
+        const auto CMD_COUNT=sizeof(workflow)/sizeof(event_cmd);
+        for( auto i=0;i<3;++i){
+            for (auto j = 0; j < CMD_COUNT; ++j){
+                synchronizer.post(workflow[j]);
+            }
+            synchronizer.wait(); // wait for all events to complete
+        }
 
-        //synchronizer.wait();
+        synchronizer.remove("Test_A");// Remove a target 
+        for( auto i=0;i<3;++i){
+            for (auto j = 0; j < CMD_COUNT; ++j){
+                synchronizer.post(workflow[j]);
+            }
+            synchronizer.wait();
+        }
 
-        synchronizer.post({ "Test_A", "start",   execution_mode::async });
-        synchronizer.post({ "Test_B", "start",   execution_mode::async });
-        synchronizer.post({ "Test_A", "execute", execution_mode::async });
-        synchronizer.post({ "Test_B", "execute", execution_mode::async });
-        synchronizer.post({ "Test_A", "exit",    execution_mode::async });
-        //synchronizer.wait();
-        //synchronizer.removeEvent("Test_A");
+        synchronizer.add({"Test_A",der_a});// Add new Target
+        synchronizer.remove("Test_B");
+        for( auto i=0;i<3;++i){
+            for (auto j = 0; j < CMD_COUNT; ++j){
+                synchronizer.post(workflow[j]);
+            }
+            synchronizer.wait(); // Test code
+        }
 
-
-        synchronizer.post({ "Test_B",  "echo",   execution_mode::async });
-
-        //der_a->remove("execute");
-        //der_b->remove("execute");
-
-        synchronizer.post({ "Test_B", "start",   execution_mode::async });
-        synchronizer.post({ "Test_B", "execute", execution_mode::async });
-        synchronizer.post({ "Test_A", "start",   execution_mode::async });
-        synchronizer.post({ "Test_A", "execute", execution_mode::async });
-        synchronizer.post({ "Test_B", "start",   execution_mode::async });
-        synchronizer.post({ "Test_A", "execute", execution_mode::async });
-        synchronizer.post({ "Test_B", "start",   execution_mode::async });
-        synchronizer.post({ "Test_A", "execute", execution_mode::async });
-        synchronizer.post({ "Test_B", "start",   execution_mode::async });
-
-        //synchronizer.wait();
-        //synchronizer.removeEvent("Test_B");
-
-        synchronizer.post({ "Test_A", "execute", execution_mode::async });
-        synchronizer.post({ "Test_B", "start",   execution_mode::async });
-        synchronizer.post({ "Test_B", "execute", execution_mode::async });
-        synchronizer.post({ "Test_A", "start",   execution_mode::async });
-        synchronizer.post({ "Test_B", "execute", execution_mode::async });
-        synchronizer.post({ "Test_B", "start",   execution_mode::async });
-        synchronizer.post({ "Test_A", "execute", execution_mode::async });
-        synchronizer.post({ "Test_B", "start",   execution_mode::async });
-        synchronizer.post({ "Test_A", "execute", execution_mode::async });
-        synchronizer.post({ "Test_B", "start",   execution_mode::async });
-        synchronizer.post({ "Test_B", "execute", execution_mode::async });
-        synchronizer.post({ "Test_B", "echo",    execution_mode::async });
-        synchronizer.post({ "Test_A", "exit", execution_mode::async });
-        synchronizer.wait();
-
+        der_a->remove("execute");// remove a specific event of a target
+        for( auto i=0;i<3;++i){
+            for (auto j = 0; j < CMD_COUNT; ++j){
+                synchronizer.post(workflow[j]);
+            }
+            synchronizer.wait(); // Test code
+        }
         synchronizer.shutdown();
         return 0;
     }
@@ -214,24 +205,28 @@ public:
 
 std::shared_ptr<event<Tests>> register_Test_1(){
     auto evt=std::make_shared<event<Tests>>();
-    evt->add("Case_1",[cmd=evt->command()](){cmd->Test_1();return true;});
+    evt->add("Case_1",[cmd=evt->command()](index id){
+        sync_cout<< id << " ";
+        cmd->Test_1();return true;});
     return evt;
 }
 
 std::shared_ptr<event<Tests>> register_Test_2(){
     auto evt=std::make_shared<event<Tests>>();
-    evt->add("Case_1",[cmd = evt->command()](){cmd->Test_2();return true;});
+    evt->add("Case_1",[cmd = evt->command()](index id){
+        sync_cout<< id << " ";
+        cmd->Test_2();return true;});
     return evt;
 }
 
 
-bool handler_A() {
-    std::cout << "[handler_A] Executed.\n";
+bool handler_A(index id) {
+    std::cout << id << " " << "[handler_A] Executed.\n";
     return true;
 }
 
-bool handler_B() {
-    std::cout << "[handler_B] Executed.\n";
+bool handler_B(index id) {
+    std::cout << id << " " << "[handler_B] Executed.\n";
     return true;
 }
 
@@ -272,7 +267,7 @@ int main(){
         synchronizer.wait();
 
         // Step 6: Remove and test ignored event
-        synchronizer.removeEvent("targetA");
+        synchronizer.remove("targetA");
         synchronizer.post({ "targetA", "evt1", execution_mode::async });
 
         // Wait and shutdown
