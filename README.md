@@ -25,18 +25,25 @@ event_synchronizer: This is the main dispatcher. It receives all incoming events
 
 executor: A dedicated worker thread that continuously processes events from its own private queue. Each executor is responsible for handling all events for a single target, ensuring sequential execution.
 
-How to Use
-1. Define an Event Handler
+# How to Use
+# 1. Define an Event Handler
 First, create an event handler for your specific task. In this example, we'll create a simple event handler for file operations.
 
-C++
+## C++
 
 #include "event_synchronizer.h" // Assuming the code is in this header
 
+#include "event_synchronizer.h" 
+#include <iostream>
+#include <syncstream>
+#include <sstream>
+#define sync_cout std::osyncstream( std::cout)
+
 /// The main event handler class for our target
-class FileHandler : public roymathew::ns_event_synchronizer::eventIF {
-public:
-    FileHandler() = default;
+
+    class FileHandler : public roymathew::ns_event_synchronizer::eventIF {
+    public:
+        FileHandler() = default;
 
     bool execute(const roymathew::ns_event_synchronizer::index id,
                  const roymathew::ns_event_synchronizer::event_id& evt_id) override {
@@ -50,6 +57,9 @@ public:
         }else if (evt_id == "READ_DATA") {
             // Logic to read data
             sync_cout << "Thread " << std::this_thread::get_id() << ": Reading data from file..." << std::endl;
+        } else if (evt_id == "CLOSE_FILE") {
+            // Logic to close data
+            sync_cout << "Thread " << std::this_thread::get_id() << ": Closing file..." << std::endl;
         } else {
             return false;
         }
@@ -59,12 +69,14 @@ public:
     void add(const roymathew::ns_event_synchronizer::event_id&, roymathew::ns_event_synchronizer::callback) override {}
     void remove(const roymathew::ns_event_synchronizer::event_id& evt) override {}
 };
-2. Initialize the Synchronizer and Post Events
+
+# 2. Initialize the Synchronizer and Post Events
 In your main function, you initialize the event_synchronizer with your event handlers and then post events.
 
 C++
 
-int main() {
+
+    int main() {
     using namespace roymathew::ns_event_synchronizer;
 
     // Initialize the synchronizer with an event handler for the "file_target"
@@ -72,34 +84,38 @@ int main() {
     event_synchronizer es({
         {"Open",fileHandler},
         {"Write", fileHandler},
-        {"Read", fileHandler}
+        {"Read1", fileHandler}, // Reader 1
+        {"Read2", fileHandler}, // Reader 2
+        {"Read3", fileHandler}, // Reader 3
+        {"Close", fileHandler}
+
     });
 
-    // --- Asynchronous Events ---
-    // These will be posted and executed in the background.
+    // --- Synchronous Events ---
     es.post({"Open", "OPEN_FILE",   execution_mode::sync});
     es.post({"Write", "WRITE_DATA", execution_mode::sync});
-    es.post({"Read", "READ_DATA",   execution_mode::sync});
+    es.post({"Read1", "READ_DATA",   execution_mode::sync});
     es.post({"Write", "WRITE_DATA", execution_mode::sync});
-    es.post({"Read", "READ_DATA",   execution_mode::sync});
+    es.post({"Read2", "READ_DATA",   execution_mode::sync});
     es.post({"Write", "WRITE_DATA", execution_mode::sync});
-    es.post({"Read", "READ_DATA",   execution_mode::sync});
 
-    std::cout << "Asynchronous events posted. Continuing..." << std::endl;
-
+     // --- Asynchronous Events ---
+    es.post({"Read1", "READ_DATA",   execution_mode::async});
+    es.post({"Read2", "READ_DATA",   execution_mode::async});
+    es.post({"Read3", "READ_DATA",   execution_mode::async});
+ 
     // --- Synchronous Events ---
-    // This call will block until the event is fully processed by the executor.
-   // es.post({"file_target", "WRITE_DATA", execution_mode::async});
-
-    std::cout << "Synchronous event completed." << std::endl;
+    es.post({"Read1", "READ_DATA",   execution_mode::sync});
+    es.post({"Close", "CLOSE_FILE", execution_mode::sync});
 
     // Graceful shutdown on application exit
     es.wait();
+    es.shutdown();
 
     return 0;
 }
-Dependencies
+# Dependencies
 This project uses only the C++ Standard Library (C++20). A C++20-compliant compiler (like GCC 10+, Clang 11+, or MSVC 19.29+) is required to compile the code.
 
-License
+# License
 This code is provided under the MIT License. You are free to use, modify, and distribute it for personal and commercial projects.
