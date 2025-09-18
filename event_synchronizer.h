@@ -10,7 +10,6 @@
 #include <shared_mutex>
 #include <unordered_map>
 #include <condition_variable>
-#include <iostream>
 
 #define sync_cout std::osyncstream( std::cout)
 
@@ -32,7 +31,7 @@ namespace roymathew::ns_event_synchronizer{
         execution_mode _execution_mode{execution_mode::sync};
     };
     // Interface for event wrappers that define execution logic
-    class i_event{
+    class eventIF{
     public:
         // Execute handler for given event type
         virtual bool execute(const index,
@@ -41,18 +40,20 @@ namespace roymathew::ns_event_synchronizer{
         virtual void add(const event_id&,
             callback)=0;
         virtual void remove(const event_id& evt)=0;
-        virtual ~i_event(){}
+        virtual ~eventIF(){}
     };
 
     // Generic event class holding command data and event handlers
     template<typename T = void>
-    class event:public i_event{
+    class event:public eventIF{
     public:
         event(){
             if constexpr (!std::is_void<T>::value){
                 cmd = std::make_shared<T>();
             }
         }
+        event(const event&)=delete;
+        event& operator=(const event&)=delete;
 
         ~event()override=default;
 
@@ -105,7 +106,7 @@ namespace roymathew::ns_event_synchronizer{
     };
 
     // Interface for event executor
-    class i_executor{
+    class executorIF{
     public:
         virtual std::future<void> submit(const index,
             const event_id,
@@ -113,13 +114,13 @@ namespace roymathew::ns_event_synchronizer{
         virtual void shutdown() noexcept=0;
         virtual void wait() noexcept=0;
         virtual bool is_idle() noexcept=0;
-        virtual ~i_executor()=default;
+        virtual ~executorIF()=default;
     };
 
     // Concrete executor for queued event processing per target
-    class executor:public i_executor{
+    class executor:public executorIF{
     public:
-        explicit executor(std::shared_ptr<i_event> evt){
+        explicit executor(std::shared_ptr<eventIF> evt){
             // One execetor/item in event registry.
             _executor_thread=std::jthread(
                 [event=std::move(evt),this](std::stop_token stop_token){
@@ -130,7 +131,7 @@ namespace roymathew::ns_event_synchronizer{
                         event_handler_data data;
                         {
                             std::unique_lock<std::mutex> lock(_evt_hndlr_mtx);
-                                // Block until an event arrives or shutdown
+                            // Block until an event arrives or shutdown
                             _cv.wait(lock,[this, stop_token]{
                                 return !_evt_hndlr_q.empty()||
                                         stop_token.stop_requested();
@@ -238,12 +239,12 @@ namespace roymathew::ns_event_synchronizer{
         // notify when queue + processing empty
         std::condition_variable _is_active_cv;
         // protected by _evt_hndlr_mtx
-        std::atomic_bool _is_active{false};
+        bool _is_active{false};
     };
 
     struct event_registry{
         target id;
-        std::shared_ptr<ns_event_synchronizer::i_event> handler;
+        std::shared_ptr<ns_event_synchronizer::eventIF> handler;
     };
 
     // Manages all event handlers and dispatching logic
@@ -275,7 +276,7 @@ namespace roymathew::ns_event_synchronizer{
                     if (!get_event_data){
                         break;
                     }
-                    std::shared_ptr<i_executor> executor;
+                    std::shared_ptr<executorIF> executor;
                     auto& [id, evt_cmd]=*get_event_data;
                     {
                         std::shared_lock lock(_executor_umap_mtx);
@@ -319,7 +320,7 @@ namespace roymathew::ns_event_synchronizer{
             if (!is_alive()) {
                 return;
             }
-            std::shared_ptr<i_executor> executor_sp;
+            std::shared_ptr<executorIF> executor_sp;
             {
                 std::scoped_lock lock(_executor_umap_mtx);
                 if( auto it = _executors.find(trgt);
@@ -341,23 +342,23 @@ namespace roymathew::ns_event_synchronizer{
 
         // Post a new event into the dispatcher queue
         index post(const event_cmd& cmd){
-            ++_post_id;
+            ++_post_idx;
             if (!is_alive()){
-                return _post_id;
+                return _post_idx;
             }
             {
                 std::shared_lock lock(_executor_umap_mtx);
                 if( auto it = _executors.find(cmd._target);
                     (it == _executors.end())){
-                    return _post_id;
+                    return _post_idx;
                 }
             }
             {
                 std::scoped_lock lock(_event_cmd_queue_mtx);
-                _event_cmd_queue.push({_post_id, cmd});
+                _event_cmd_queue.push({_post_idx, cmd});
             }
             _event_cmd_cv.notify_one();
-            return _post_id;
+            return _post_idx;
         }
 
         // Blocks until all events are fully processed
@@ -402,10 +403,10 @@ namespace roymathew::ns_event_synchronizer{
         event_synchronizer& operator=(const event_synchronizer&) = delete;
 
     private:
-        index _post_id{0};
+        index _post_idx{0};
 
         // One Executor/target
-        std::unordered_map<target,std::shared_ptr<i_executor>> _executors;
+        std::unordered_map<target,std::shared_ptr<executorIF>> _executors;
         // std::shared_mutex to allow parallel read access in wait() & _synchronizer_thread
         std::shared_mutex _executor_umap_mtx;
 
