@@ -33,7 +33,7 @@ C++
 
 #include "event_synchronizer.h" // Assuming the code is in this header
 
-// The main event handler class for our target
+/// The main event handler class for our target
 class FileHandler : public roymathew::ns_event_synchronizer::eventIF {
 public:
     FileHandler() = default;
@@ -43,10 +43,13 @@ public:
         // Here, you would put the actual business logic for a file event
         if (evt_id == "OPEN_FILE") {
             // Logic to open a file
-            std::cout << "Thread " << std::this_thread::get_id() << ": Opening file..." << std::endl;
+            sync_cout << "Thread " << std::this_thread::get_id() << ": Opening file..." << std::endl;
         } else if (evt_id == "WRITE_DATA") {
             // Logic to write data
-            std::cout << "Thread " << std::this_thread::get_id() << ": Writing data to file..." << std::endl;
+            sync_cout << "Thread " << std::this_thread::get_id() << ": Writing data to file..." << std::endl;
+        }else if (evt_id == "READ_DATA") {
+            // Logic to read data
+            sync_cout << "Thread " << std::this_thread::get_id() << ": Reading data from file..." << std::endl;
         } else {
             return false;
         }
@@ -65,20 +68,28 @@ int main() {
     using namespace roymathew::ns_event_synchronizer;
 
     // Initialize the synchronizer with an event handler for the "file_target"
+    auto fileHandler =  std::make_shared<FileHandler>();
     event_synchronizer es({
-        {"file_target", std::make_shared<FileHandler>()}
+        {"Open",fileHandler},
+        {"Write", fileHandler},
+        {"Read", fileHandler}
     });
 
     // --- Asynchronous Events ---
     // These will be posted and executed in the background.
-    es.post({"file_target", "OPEN_FILE", execution_mode::async});
-    es.post({"file_target", "WRITE_DATA", execution_mode::async});
+    es.post({"Open", "OPEN_FILE",   execution_mode::sync});
+    es.post({"Write", "WRITE_DATA", execution_mode::sync});
+    es.post({"Read", "READ_DATA",   execution_mode::sync});
+    es.post({"Write", "WRITE_DATA", execution_mode::sync});
+    es.post({"Read", "READ_DATA",   execution_mode::sync});
+    es.post({"Write", "WRITE_DATA", execution_mode::sync});
+    es.post({"Read", "READ_DATA",   execution_mode::sync});
 
     std::cout << "Asynchronous events posted. Continuing..." << std::endl;
 
     // --- Synchronous Events ---
     // This call will block until the event is fully processed by the executor.
-    es.post({"file_target", "WRITE_DATA", execution_mode::sync});
+   // es.post({"file_target", "WRITE_DATA", execution_mode::async});
 
     std::cout << "Synchronous event completed." << std::endl;
 
