@@ -1,0 +1,45 @@
+<?xml version="1.0"?>
+<books>
+	<book id="bk004">
+		<author>Poet</author>
+		<title>The Poet's First Poem</title>
+		<genre>Poem</genre>
+		<price>20.95</price>
+		<review>Least poetic poems.</review>
+	</book>
+	<book id="bk005">
+		<author>Poet</author>
+		<title>The Poet's First Poem</title>
+		<genre>Poem</genre>
+		<price>21.95</price>
+		<review>Least poetic poems.</review>
+	</book>
+	<book id="bk006">
+		<author>Poet</author>
+		<title>The Poet's First Poem</title>
+		<genre>Poem</genre>
+		<price>22.95</price>
+		<review>Least poetic poems.</review>
+	</book>
+	<book id="bk007">
+		<author>Poet</author>
+		<title>The Poet's First Poem</title>
+		<genre>Poem</genre>
+		<price>23.95</price>
+		<review>Least poetic poems.</review>
+	</book>
+	<book id="bk008">
+		<author>Poet</author>
+		<title>The Poet's First Poem</title>
+		<genre>Poem</genre>
+		<price>24.95</price>
+		<review>Least poetic poems.</review>
+	</book>
+	<book id="bk009">
+		<author>Poet</author>
+		<title>The Poet's First Poem</title>
+		<genre>Poem</genre>
+		<price>25.95</price>
+		<review>Least poetic poems.</review>
+	</book>
+</books>
