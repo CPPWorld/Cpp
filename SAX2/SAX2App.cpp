@@ -39,7 +39,7 @@ int main(int argc, char** pvArg)
     //    return;
     //}
     std::any UserInfo = std::make_any<USER_INFO_st>( 1 );
-    return ( SAX2XML::SAX2Client( L"E:\\Roy\\Official\\Office\\SID\\study\\SAX2\\Books.xml",
+    return ( SAX2XML::SAX2Client( L"Books.xml",
                                   L"price",
                                   SAX2XMLOutputCallbackFunc,
                                   SAX2XMLErrorCallbackFunc,
