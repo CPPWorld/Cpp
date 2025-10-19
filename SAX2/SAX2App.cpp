@@ -32,12 +32,9 @@ struct USER_INFO_st
 };
 
 
-int main(int argc, char** pvArg)
+int main(int /*argc*/, char** /*pvArg*/)
 {
-    //if (argc < 2)
-    //{
-    //    return;
-    //}
+
     std::any UserInfo = std::make_any<USER_INFO_st>( 1 );
     return ( SAX2XML::SAX2Client( L"Books.xml",
                                   L"price",
